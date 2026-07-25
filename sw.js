@@ -8,7 +8,7 @@ const SHELL_FILES = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)).catch(() => {})
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES)).catch(() => { })
   );
   self.skipWaiting();
 });
@@ -36,7 +36,7 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => { });
           return res;
         })
         .catch(() => caches.match('./index.html'))
@@ -48,7 +48,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       caches.match(req).then((cached) => cached || fetch(req).then((res) => {
         const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => { });
         return res;
       }))
     );

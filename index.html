@@ -1,798 +1,1493 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Askara Melon — Monitor Hidroponik</title>
-<meta name="theme-color" content="#101B14">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Askara Melon">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" href="icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
-  :root{
-    --bg:#101B14;
-    --surface:#16241A;
-    --card:#1C2E20;
-    --card-hi:#213826;
-    --hairline:#2A3F2E;
-    --text:#EDF3E9;
-    --muted:#8FA88F;
-    --muted-dim:#5F7864;
-    --good:#6FCB4D;
-    --good-dim:#3B5A31;
-    --warn:#E8B24A;
-    --warn-dim:#5A4B29;
-    --alert:#E2604A;
-    --alert-dim:#5A342B;
-    --aqua:#4FB6C9;
-    --aqua-dim:#274953;
-    --radius:14px;
-    --nav-h:64px;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;}
-  body{
-    background:
-      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(111,203,77,0.10), transparent 60%),
-      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(79,182,201,0.08), transparent 55%),
-      var(--bg);
-    color:var(--text);
-    font-family:'Inter',sans-serif;
-    min-height:100vh;
-    min-height:100dvh;
-    -webkit-font-smoothing:antialiased;
-    overscroll-behavior-y:contain;
-  }
-  .veins{
-    position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.05;
-    background-image:
-      repeating-linear-gradient(115deg, transparent 0 60px, var(--good) 60px 61px),
-      repeating-linear-gradient(25deg, transparent 0 90px, var(--aqua) 90px 91px);
-  }
-  .wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:18px 18px 40px;}
-
-  /* ---------- top bar ---------- */
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between; gap:14px;
-    flex-wrap:wrap; margin-bottom:22px;
-  }
-  .brand{display:flex; align-items:center; gap:12px; min-width:0;}
-  .brand h1{
-    font-family:'Fraunces',serif; font-weight:600; font-size:22px; margin:0; letter-spacing:0.2px;
-    white-space:nowrap;
-  }
-  .brand .topic{
-    font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--muted); margin-top:2px;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  }
-  .leaf{
-    width:34px; height:34px; flex:none; transition:filter .4s ease;
-    filter:drop-shadow(0 0 0 rgba(111,203,77,0));
-  }
-  .leaf.on{filter:drop-shadow(0 0 10px rgba(111,203,77,0.55));}
-  .leaf.demo{filter:drop-shadow(0 0 10px rgba(232,178,74,0.5));}
-
-  .status-cluster{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-  .pill{
-    display:flex; align-items:center; gap:7px;
-    padding:6px 11px; border-radius:999px; font-size:12px; font-weight:600;
-    background:var(--card); border:1px solid var(--hairline); color:var(--muted);
-    white-space:nowrap;
-  }
-  .pill .dot{width:7px; height:7px; border-radius:50%; background:var(--muted-dim); flex:none;}
-  .pill.ok{color:var(--good); border-color:var(--good-dim);} .pill.ok .dot{background:var(--good);}
-  .pill.bad{color:var(--alert); border-color:var(--alert-dim);} .pill.bad .dot{background:var(--alert);}
-  .pill.warn{color:var(--warn); border-color:var(--warn-dim);} .pill.warn .dot{background:var(--warn);}
-
-  .iconbtn{
-    width:36px; height:36px; display:flex; align-items:center; justify-content:center;
-    border-radius:10px; background:var(--card); border:1px solid var(--hairline);
-    cursor:pointer; color:var(--muted); transition:all .15s ease; flex:none;
-  }
-  .iconbtn:hover, .iconbtn.active{color:var(--good); border-color:var(--good-dim);}
-  .iconbtn svg{width:17px; height:17px;}
-
-  /* ---------- views ---------- */
-  .view{display:block;}
-  .view.hidden{display:none;}
-
-  /* ---------- settings view ---------- */
-  .settings-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
-  .settings-head h2{font-family:'Fraunces',serif; font-size:19px; font-weight:600; margin:0;}
-  .back-link{
-    display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12.5px; font-weight:600;
-    background:none; border:none; cursor:pointer; padding:6px 4px;
-  }
-  .back-link:hover{color:var(--text);}
-  .panel{
-    background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius);
-    padding:20px; margin-bottom:20px;
-  }
-  .panel .sub{font-size:12.5px; color:var(--muted); margin:0 0 16px; line-height:1.5;}
-  .grid-fields{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px;}
-  .field label{display:block; font-size:11.5px; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.04em;}
-  .field input, .field select{
-    width:100%; background:var(--bg); border:1px solid var(--hairline); color:var(--text);
-    padding:11px 10px; border-radius:8px; font-family:'IBM Plex Mono',monospace; font-size:14px;
-    outline:none;
-  }
-  .field input:focus, .field select:focus{border-color:var(--good-dim);}
-  .panel-actions{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; align-items:center;}
-  .btn{
-    font-family:'Inter',sans-serif; font-weight:600; font-size:13.5px; padding:11px 18px;
-    border-radius:9px; border:1px solid transparent; cursor:pointer; transition:all .15s ease;
-  }
-  .btn-primary{background:var(--good); color:#0D1A0F;}
-  .btn-primary:hover{background:#84d966;}
-  .btn-primary:disabled{background:var(--good-dim); color:var(--muted); cursor:not-allowed;}
-  .btn-ghost{background:transparent; color:var(--muted); border-color:var(--hairline);}
-  .btn-ghost:hover{color:var(--text); border-color:var(--muted-dim);}
-  .conn-error{font-size:12.5px; color:var(--alert); margin-top:12px; font-family:'IBM Plex Mono',monospace;}
-  .status-summary{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
-
-  .install-tip{
-    display:flex; gap:10px; align-items:flex-start; background:var(--card); border:1px solid var(--hairline);
-    border-radius:var(--radius); padding:16px; font-size:12.5px; color:var(--muted); line-height:1.55;
-  }
-  .install-tip svg{flex:none; width:18px; height:18px; color:var(--aqua); margin-top:1px;}
-  .install-tip b{color:var(--text);}
-
-  /* ---------- retained badge ---------- */
-  .retain-banner{
-    display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--warn);
-    background:var(--warn-dim); border:1px solid rgba(232,178,74,0.35); border-radius:10px;
-    padding:9px 13px; margin-bottom:20px; font-family:'IBM Plex Mono',monospace;
-  }
-  .retain-banner svg{flex:none;}
-
-  /* ---------- hero meters ---------- */
-  .hero{display:grid; grid-template-columns:1.1fr 1fr; gap:14px; margin-bottom:14px;}
-  @media(max-width:760px){.hero{grid-template-columns:1fr;}}
-  .meter-card{
-    background:var(--card); border:1px solid var(--hairline); border-radius:var(--radius);
-    padding:20px; position:relative; overflow:hidden;
-  }
-  .meter-card .eyebrow{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; font-weight:600;}
-  .ph-layout{display:flex; align-items:center; gap:16px; margin-top:10px; flex-wrap:wrap;}
-  .ph-value{
-    font-family:'IBM Plex Mono',monospace; font-size:46px; font-weight:600; line-height:1;
-  }
-  .ph-label{font-size:13px; color:var(--muted); margin-top:6px;}
-  .ph-tag{
-    display:inline-block; margin-top:10px; font-size:11.5px; font-weight:600; padding:4px 10px;
-    border-radius:999px; font-family:'Inter',sans-serif;
-  }
-  .gauge-wrap{flex:none;}
-
-  .tds-temp{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
-  .mini-meter{padding-top:2px;}
-  .mini-meter .val{font-family:'IBM Plex Mono',monospace; font-size:32px; font-weight:600; line-height:1; margin-top:8px;}
-  .mini-meter .unit{font-size:13px; color:var(--muted); font-weight:500; margin-left:3px;}
-  .mini-meter .val.aqua{color:var(--aqua);}
-  .mini-meter .val.temp{color:#F0C36D;}
-  .mini-meter .foot{font-size:11.5px; color:var(--muted-dim); margin-top:6px; font-family:'IBM Plex Mono',monospace;}
-  .divider-mini{height:1px; background:var(--hairline); margin:14px 0;}
-
-  /* ---------- secondary grid ---------- */
-  .grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px;}
-  @media(max-width:900px){.grid4{grid-template-columns:repeat(2,1fr);}}
-  .status-card{
-    background:var(--card); border:1px solid var(--hairline); border-radius:var(--radius);
-    padding:15px; display:flex; flex-direction:column; gap:8px;
-  }
-  .status-card .top-row{display:flex; align-items:center; justify-content:space-between;}
-  .status-card .icon{width:19px; height:19px; color:var(--muted);}
-  .status-card .name{font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600;}
-  .state-chip{
-    align-self:flex-start; font-family:'IBM Plex Mono',monospace; font-size:14.5px; font-weight:600;
-    padding:5px 12px; border-radius:8px; display:flex; align-items:center; gap:7px;
-  }
-  .state-chip.on{background:var(--good-dim); color:var(--good);}
-  .state-chip.off{background:rgba(255,255,255,0.04); color:var(--muted-dim);}
-  .state-chip .dot{width:7px; height:7px; border-radius:50%; background:currentColor;}
-
-  /* ---------- trend ---------- */
-  .trend-card{
-    background:var(--card); border:1px solid var(--hairline); border-radius:var(--radius);
-    padding:18px; margin-bottom:14px;
-  }
-  .trend-head{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;}
-  .trend-head h3{font-family:'Fraunces',serif; font-size:15.5px; font-weight:600; margin:0;}
-  .tabs{display:flex; gap:6px; background:var(--surface); padding:4px; border-radius:10px; border:1px solid var(--hairline);}
-  .tab{
-    font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:600; padding:6px 12px; border-radius:7px;
-    color:var(--muted); cursor:pointer; background:transparent; border:none;
-  }
-  .tab.active{background:var(--card-hi); color:var(--text);}
-  .chart-holder{height:200px; position:relative;}
-  .empty-chart{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    color:var(--muted-dim); font-size:12.5px; font-family:'IBM Plex Mono',monospace; text-align:center; padding:0 20px;
-  }
-
-  /* ---------- calibration / raw ---------- */
-  .lower{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
-  @media(max-width:760px){.lower{grid-template-columns:1fr;}}
-  .spec-card{
-    background:var(--card); border:1px solid var(--hairline); border-radius:var(--radius); padding:16px 18px;
-  }
-  .spec-card h3{font-family:'Fraunces',serif; font-size:14.5px; font-weight:600; margin:0 0 10px;}
-  .spec-row{
-    display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--hairline);
-    font-family:'IBM Plex Mono',monospace; font-size:12.5px; gap:10px;
-  }
-  .spec-row .k{color:var(--muted);}
-  .spec-row .v{color:var(--text); font-weight:600; text-align:right;}
-  .spec-row:last-child{border-bottom:none;}
-
-  footer{text-align:center; color:var(--muted-dim); font-size:11px; margin-top:24px; font-family:'IBM Plex Mono',monospace;}
-
-  /* ---------- bottom nav (mobile) ---------- */
-  .bottom-nav{
-    display:none;
-    position:fixed; left:0; right:0; bottom:0; z-index:20;
-    background:rgba(22,36,26,0.92); backdrop-filter:blur(14px);
-    border-top:1px solid var(--hairline);
-    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
-    justify-content:space-around;
-  }
-  .nav-btn{
-    display:flex; flex-direction:column; align-items:center; gap:3px;
-    background:none; border:none; color:var(--muted-dim); font-family:'Inter',sans-serif;
-    font-size:11px; font-weight:600; padding:6px 22px; border-radius:12px; cursor:pointer;
-    transition:color .15s ease;
-  }
-  .nav-btn svg{width:22px; height:22px;}
-  .nav-btn.active{color:var(--good);}
-
-  @media(max-width:760px){
-    body{padding-bottom:var(--nav-h);}
-    .bottom-nav{display:flex;}
-    .iconbtn.desktop-only{display:none;}
-    .wrap{padding-bottom:24px;}
-  }
-
-  .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);}
-  :focus-visible{outline:2px solid var(--good); outline-offset:2px;}
-  @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
-</style>
-</head>
-<body>
-<div class="veins"></div>
-<div class="wrap">
-
-  <div class="topbar">
-    <div class="brand">
-      <svg class="leaf" id="leafIcon" viewBox="0 0 48 48" fill="none">
-        <path d="M24 6C12 6 6 16 6 26c0 9 6 16 18 16s18-7 18-16C42 16 36 6 24 6Z" stroke="currentColor" stroke-width="2" fill="rgba(111,203,77,0.08)"/>
-        <path d="M24 42V16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M24 24c-4-4-10-5-14-3M24 30c4-4 10-5 14-3M24 18c-3-3-7-4-10-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-      </svg>
-      <div style="min-width:0;">
-        <h1>Askara Melon</h1>
-        <div class="topic">topik: <span id="topicLabel">askara/melon/status</span></div>
-      </div>
-    </div>
-    <div class="status-cluster">
-      <span class="pill" id="statusPill"><span class="dot"></span><span id="statusText">Belum terhubung</span></span>
-      <span class="pill" id="lastUpdatePill" style="display:none;"><span class="dot" style="background:var(--aqua)"></span><span id="lastUpdateText">—</span></span>
-      <button class="iconbtn desktop-only" id="settingsToggle" aria-label="Pengaturan koneksi" title="Pengaturan koneksi">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15a3 3 0 100-6 3 3 0 000 6Z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1Z"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- ============ DASHBOARD VIEW ============ -->
-  <section class="view" id="dashboardView">
-
-    <div class="retain-banner" id="retainBanner" style="display:none;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
-      <span id="retainText">Menampilkan pesan retained terakhir dari broker — menunggu pembaruan langsung.</span>
-    </div>
-
-    <div class="hero">
-      <div class="meter-card">
-        <div class="eyebrow">Tingkat keasaman</div>
-        <div class="ph-layout">
-          <div class="gauge-wrap">
-            <svg width="130" height="84" viewBox="0 0 140 90">
-              <path d="M10 80 A60 60 0 0 1 46.6 25.3" stroke="var(--alert)" stroke-width="10" fill="none" stroke-linecap="round"/>
-              <path d="M46.6 25.3 A60 60 0 0 1 93.4 25.3" stroke="var(--good)" stroke-width="10" fill="none" stroke-linecap="round"/>
-              <path d="M93.4 25.3 A60 60 0 0 1 130 80" stroke="var(--aqua)" stroke-width="10" fill="none" stroke-linecap="round"/>
-              <line id="phNeedle" x1="70" y1="80" x2="70" y2="26" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round" style="transform-origin:70px 80px;"/>
-              <circle cx="70" cy="80" r="4.5" fill="var(--text)"/>
-            </svg>
-          </div>
-          <div>
-            <div class="ph-value" id="phValue">—</div>
-            <div class="ph-label">pH larutan nutrisi</div>
-            <div class="ph-tag" id="phTag">menunggu data</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="meter-card">
-        <div class="eyebrow">Suhu &amp; kepekatan nutrisi</div>
-        <div class="tds-temp">
-          <div class="mini-meter">
-            <div class="eyebrow" style="font-size:11px;">Suhu larutan</div>
-            <div class="val temp" id="tempValue">—<span class="unit">°C</span></div>
-            <div class="foot" id="tempFoot">voltPH —</div>
-          </div>
-          <div class="mini-meter">
-            <div class="eyebrow" style="font-size:11px;">TDS</div>
-            <div class="val aqua" id="tdsValue">—<span class="unit">ppm</span></div>
-            <div class="foot" id="tdsFoot">voltTDS —</div>
-          </div>
-        </div>
-        <div class="divider-mini"></div>
-        <div class="mini-meter">
-          <div class="eyebrow" style="font-size:11px;">Volume air</div>
-          <div class="val" id="volValue" style="color:var(--text);">—<span class="unit">%</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid4">
-      <div class="status-card">
-        <div class="top-row">
-          <span class="name">Nutrisi A</span>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v6M12 22v-6M4 12h6M14 12h6"/><circle cx="12" cy="12" r="3"/></svg>
-        </div>
-        <span class="state-chip off" id="chipA"><span class="dot"></span><span id="chipAText">OFF</span></span>
-      </div>
-      <div class="status-card">
-        <div class="top-row">
-          <span class="name">Nutrisi B</span>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v6M12 22v-6M4 12h6M14 12h6"/><circle cx="12" cy="12" r="3"/></svg>
-        </div>
-        <span class="state-chip off" id="chipB"><span class="dot"></span><span id="chipBText">OFF</span></span>
-      </div>
-      <div class="status-card">
-        <div class="top-row">
-          <span class="name">Katup / valve</span>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M5 8l7-6 7 6M5 16l7 6 7-6"/></svg>
-        </div>
-        <span class="state-chip off" id="chipValve"><span class="dot"></span><span id="chipValveText">OFF</span></span>
-      </div>
-      <div class="status-card">
-        <div class="top-row">
-          <span class="name">Pesan diterima</span>
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-        </div>
-        <span class="state-chip off" id="chipCount" style="color:var(--text); background:rgba(255,255,255,0.04);"><span id="chipCountText">0</span></span>
-      </div>
-    </div>
-
-    <div class="trend-card">
-      <div class="trend-head">
-        <h3>Tren pembacaan sesi ini</h3>
-        <div class="tabs" role="tablist">
-          <button class="tab active" data-metric="temp">Suhu</button>
-          <button class="tab" data-metric="ph">pH</button>
-          <button class="tab" data-metric="tds">TDS</button>
-        </div>
-      </div>
-      <div class="chart-holder">
-        <canvas id="trendChart"></canvas>
-        <div class="empty-chart" id="emptyChart">Belum ada data — hubungkan ke broker atau jalankan mode demo untuk mulai mengisi grafik.</div>
-      </div>
-    </div>
-
-    <div class="lower">
-      <div class="spec-card">
-        <h3>Kalibrasi sensor pH</h3>
-        <div class="spec-row"><span class="k">acidVoltage</span><span class="v" id="cfgAcid">—</span></div>
-        <div class="spec-row"><span class="k">neutralVoltage</span><span class="v" id="cfgNeutral">—</span></div>
-        <div class="spec-row"><span class="k">alkalineVoltage</span><span class="v" id="cfgAlkaline">—</span></div>
-        <div class="spec-row"><span class="k">kValue (TDS)</span><span class="v" id="cfgK">—</span></div>
-      </div>
-      <div class="spec-card">
-        <h3>Pembacaan mentah</h3>
-        <div class="spec-row"><span class="k">voltPH</span><span class="v" id="rawVoltPH">—</span></div>
-        <div class="spec-row"><span class="k">voltTDS</span><span class="v" id="rawVoltTDS">—</span></div>
-        <div class="spec-row"><span class="k">ts</span><span class="v" id="rawTs">—</span></div>
-        <div class="spec-row"><span class="k">date</span><span class="v" id="rawDate">—</span></div>
-      </div>
-    </div>
-
-    <footer>Askara Melon · askara/melon/status · disegarkan otomatis saat pesan baru masuk</footer>
-  </section>
-
-  <!-- ============ SETTINGS VIEW ============ -->
-  <section class="view hidden" id="settingsView">
-    <div class="settings-head">
-      <h2>Pengaturan</h2>
-      <button class="back-link" id="backToDash">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Kembali ke Dashboard
-      </button>
-    </div>
-
-    <div class="status-summary">
-      <span class="pill" id="statusPill2"><span class="dot"></span><span id="statusText2">Belum terhubung</span></span>
-      <span class="pill" id="lastUpdatePill2" style="display:none;"><span class="dot" style="background:var(--aqua)"></span><span id="lastUpdateText2">—</span></span>
-    </div>
-
-    <div class="panel">
-      <p class="sub">Konfigurasi broker MQTT (EMQX). Koneksi memakai MQTT over WebSocket langsung dari peramban — kredensial hanya disimpan sementara di sesi ini, tidak dikirim ke mana pun selain broker.</p>
-      <div class="grid-fields">
-        <div class="field">
-          <label for="fProto">Protokol</label>
-          <select id="fProto">
-            <option value="wss">wss:// (aman, port umum 8084)</option>
-            <option value="ws">ws:// (tanpa TLS, port umum 8083)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="fHost">Host broker</label>
-          <input id="fHost" type="text" placeholder="mis. abcde123.ala.asia-southeast1.emqxsl.com" autocapitalize="off" autocorrect="off">
-        </div>
-        <div class="field">
-          <label for="fPort">Port</label>
-          <input id="fPort" type="text" inputmode="numeric" placeholder="8084">
-        </div>
-        <div class="field">
-          <label for="fPath">Path WebSocket</label>
-          <input id="fPath" type="text" value="/mqtt" autocapitalize="off" autocorrect="off">
-        </div>
-        <div class="field">
-          <label for="fUser">Username</label>
-          <input id="fUser" type="text" placeholder="opsional" autocapitalize="off" autocorrect="off">
-        </div>
-        <div class="field">
-          <label for="fPass">Password</label>
-          <input id="fPass" type="password" placeholder="opsional">
-        </div>
-        <div class="field">
-          <label for="fTopic">Topik</label>
-          <input id="fTopic" type="text" value="askara/melon/status" autocapitalize="off" autocorrect="off">
-        </div>
-        <div class="field">
-          <label for="fClientId">Client ID</label>
-          <input id="fClientId" type="text" autocapitalize="off" autocorrect="off">
-        </div>
-      </div>
-      <div class="panel-actions">
-        <button class="btn btn-primary" id="connectBtn">Hubungkan</button>
-        <button class="btn btn-ghost" id="disconnectBtn" style="display:none;">Putuskan</button>
-        <button class="btn btn-ghost" id="demoBtn">Coba mode demo</button>
-      </div>
-      <div class="conn-error" id="connError" style="display:none;"></div>
-    </div>
-
-    <div class="install-tip">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
-      <div><b>Pasang sebagai aplikasi:</b> buka halaman ini di Chrome/Safari, lalu pilih "Tambahkan ke Layar Utama" (Android) atau "Add to Home Screen" (iOS) supaya Askara Melon berjalan seperti aplikasi mandiri.</div>
-    </div>
-  </section>
-
-</div>
-
-<nav class="bottom-nav" id="bottomNav">
-  <button class="nav-btn active" data-view="dashboard">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-    Dashboard
-  </button>
-  <button class="nav-btn" data-view="settings">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15a3 3 0 100-6 3 3 0 000 6Z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1Z"/></svg>
-    Pengaturan
-  </button>
-</nav>
-
-<script>
-(function(){
-  const $ = id => document.getElementById(id);
-  const dashboardView = $('dashboardView');
-  const settingsView = $('settingsView');
-  const bottomNav = $('bottomNav');
-  const settingsToggle = $('settingsToggle');
-  const backToDash = $('backToDash');
-  const connectBtn = $('connectBtn');
-  const disconnectBtn = $('disconnectBtn');
-  const demoBtn = $('demoBtn');
-  const connError = $('connError');
-  const leafIcon = $('leafIcon');
-  const topicLabel = $('topicLabel');
-  const retainBanner = $('retainBanner');
-
-  $('fClientId').value = 'askara-web-' + Math.random().toString(16).slice(2,8);
-
-  // ---------- view switching ----------
-  function setView(view){
-    if(view === 'settings'){
-      dashboardView.classList.add('hidden');
-      settingsView.classList.remove('hidden');
-    }else{
-      settingsView.classList.add('hidden');
-      dashboardView.classList.remove('hidden');
-    }
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    if(settingsToggle) settingsToggle.classList.toggle('active', view === 'settings');
-  }
-  document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
-  if(settingsToggle) settingsToggle.addEventListener('click', () => {
-    const isOpen = !settingsView.classList.contains('hidden');
-    setView(isOpen ? 'dashboard' : 'settings');
-  });
-  backToDash.addEventListener('click', () => setView('dashboard'));
-
-  // ---------- status (mirrored to both views) ----------
-  function setStatus(kind, text){
-    ['statusPill','statusPill2'].forEach(id => { const el = $(id); if(el) el.className = 'pill' + (kind ? ' ' + kind : ''); });
-    ['statusText','statusText2'].forEach(id => { const el = $(id); if(el) el.textContent = text; });
-    leafIcon.classList.remove('on','demo');
-    if(kind === 'ok') leafIcon.classList.add('on');
-    if(kind === 'warn') leafIcon.classList.add('demo');
-  }
-  function setLastUpdate(text){
-    ['lastUpdatePill','lastUpdatePill2'].forEach(id => { const el = $(id); if(el) el.style.display = 'flex'; });
-    ['lastUpdateText','lastUpdateText2'].forEach(id => { const el = $(id); if(el) el.textContent = text; });
-  }
-
-  function showError(msg){
-    connError.style.display = msg ? 'block' : 'none';
-    connError.textContent = msg || '';
-  }
-
-  let client = null;
-  let msgCount = 0;
-  let demoTimer = null;
-  const history = { temp: [], ph: [], tds: [], labels: [] };
-  const MAX_POINTS = 40;
-
-  // ---------- connect ----------
-  connectBtn.addEventListener('click', () => {
-    stopDemo();
-    showError('');
-    const proto = $('fProto').value;
-    const host = $('fHost').value.trim();
-    const port = $('fPort').value.trim() || (proto === 'wss' ? '8084' : '8083');
-    const path = $('fPath').value.trim() || '/mqtt';
-    const user = $('fUser').value;
-    const pass = $('fPass').value;
-    const topic = $('fTopic').value.trim() || 'askara/melon/status';
-    const clientId = $('fClientId').value.trim() || ('askara-web-' + Math.random().toString(16).slice(2,8));
-
-    if(!host){ showError('Isi host broker terlebih dahulu.'); return; }
-
-    topicLabel.textContent = topic;
-    const url = proto + '://' + host + ':' + port + path;
-
-    setStatus('warn', 'Menghubungkan…');
-    connectBtn.disabled = true;
-
-    try{
-      if(typeof mqtt === 'undefined'){
-        showError('Pustaka MQTT gagal dimuat dari CDN. Periksa koneksi internet lalu muat ulang halaman.');
-        setStatus(null, 'Belum terhubung');
-        connectBtn.disabled = false;
-        return;
-      }
-      client = mqtt.connect(url, {
-        clientId,
-        username: user || undefined,
-        password: pass || undefined,
-        reconnectPeriod: 4000,
-        connectTimeout: 8000,
-        clean: true
-      });
-
-      client.on('connect', () => {
-        setStatus('ok', 'Terhubung');
-        connectBtn.disabled = false;
-        connectBtn.style.display = 'none';
-        disconnectBtn.style.display = 'inline-block';
-        showError('');
-        client.subscribe(topic, { qos: 1 }, (err) => {
-          if(err) showError('Gagal subscribe ke topik: ' + err.message);
-        });
-      });
-
-      client.on('message', (t, message, packet) => {
-        try{
-          const payload = JSON.parse(message.toString());
-          handlePayload(payload, !!(packet && packet.retain));
-        }catch(e){
-          showError('Payload MQTT bukan JSON yang valid.');
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Askara Melon — Monitor Hidroponik</title>
+    <meta name="theme-color" content="#101B14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Askara Melon">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" href="icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #101B14;
+            --surface: #16241A;
+            --card: #1C2E20;
+            --card-hi: #213826;
+            --hairline: #2A3F2E;
+            --text: #EDF3E9;
+            --muted: #8FA88F;
+            --muted-dim: #5F7864;
+            --good: #6FCB4D;
+            --good-dim: #3B5A31;
+            --warn: #E8B24A;
+            --warn-dim: #5A4B29;
+            --alert: #E2604A;
+            --alert-dim: #5A342B;
+            --aqua: #4FB6C9;
+            --aqua-dim: #274953;
+            --radius: 14px;
+            --nav-h: 64px;
         }
-      });
 
-      client.on('reconnect', () => setStatus('warn', 'Menyambung ulang…'));
-      client.on('close', () => { if(client) setStatus(null, 'Terputus'); });
-      client.on('error', (err) => {
-        showError('Kesalahan koneksi: ' + (err && err.message ? err.message : err));
-        setStatus('bad', 'Gagal terhubung');
-        connectBtn.disabled = false;
-      });
-    }catch(e){
-      showError('URL broker tidak valid: ' + e.message);
-      setStatus(null, 'Belum terhubung');
-      connectBtn.disabled = false;
-    }
-  });
+        * {
+            box-sizing: border-box;
+        }
 
-  disconnectBtn.addEventListener('click', () => {
-    if(client){ client.end(true); client = null; }
-    connectBtn.style.display = 'inline-block';
-    connectBtn.disabled = false;
-    disconnectBtn.style.display = 'none';
-    setStatus(null, 'Terputus');
-  });
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+        }
 
-  // ---------- demo mode ----------
-  const sample = {
-    temp: 27.8125, voltPH: 3.784212, ph: 3.961708, voltTDS: 4.567681, tds: 2.272022,
-    vol: 100, nutrisiA: 'OFF', nutrisiB: 'OFF', valve: 'OFF',
-    config: { acidVoltage: 3.78, neutralVoltage: 3.45, alkalineVoltage: 3.18, kValue: 1.1 }
-  };
+        body {
+            background:
+                radial-gradient(ellipse 900px 500px at 15% -10%, rgba(111, 203, 77, 0.10), transparent 60%),
+                radial-gradient(ellipse 700px 500px at 100% 10%, rgba(79, 182, 201, 0.08), transparent 55%),
+                var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            min-height: 100dvh;
+            -webkit-font-smoothing: antialiased;
+            overscroll-behavior-y: contain;
+        }
 
-  demoBtn.addEventListener('click', () => {
-    if(demoTimer){ stopDemo(); return; }
-    if(client){ client.end(true); client = null; }
-    connectBtn.style.display = 'inline-block'; connectBtn.disabled = false; disconnectBtn.style.display = 'none';
-    demoBtn.textContent = 'Hentikan mode demo';
-    setStatus('warn', 'Mode demo (simulasi)');
-    retainBanner.style.display = 'none';
-    let tick = 0;
-    const run = () => {
-      tick++;
-      const jitter = (n, amt) => +(n + (Math.random()-0.5)*amt).toFixed(4);
-      const payload = {
-        temp: jitter(sample.temp, 0.6),
-        voltPH: jitter(sample.voltPH, 0.02),
-        ph: jitter(sample.ph, 0.15),
-        voltTDS: jitter(sample.voltTDS, 0.05),
-        tds: jitter(sample.tds, 0.1),
-        vol: sample.vol,
-        nutrisiA: tick % 6 < 3 ? 'ON' : 'OFF',
-        nutrisiB: tick % 8 < 2 ? 'ON' : 'OFF',
-        valve: tick % 5 < 1 ? 'ON' : 'OFF',
-        date: new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) + ', ' + new Date().toLocaleTimeString('id-ID'),
-        ts: Math.floor(Date.now()/1000),
-        config: sample.config
-      };
-      handlePayload(payload, tick === 1);
-    };
-    run();
-    demoTimer = setInterval(run, 3000);
-  });
+        .veins {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.05;
+            background-image:
+                repeating-linear-gradient(115deg, transparent 0 60px, var(--good) 60px 61px),
+                repeating-linear-gradient(25deg, transparent 0 90px, var(--aqua) 90px 91px);
+        }
 
-  function stopDemo(){
-    if(demoTimer){ clearInterval(demoTimer); demoTimer = null; demoBtn.textContent = 'Coba mode demo'; }
-  }
+        .wrap {
+            position: relative;
+            z-index: 1;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 18px 18px 40px;
+        }
 
-  // ---------- rendering ----------
-  function handlePayload(p, isRetain){
-    msgCount++;
-    $('chipCountText').textContent = msgCount;
+        /* ---------- top bar ---------- */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 22px;
+        }
 
-    if(isRetain){
-      retainBanner.style.display = 'flex';
-      $('retainText').textContent = 'Pesan pertama ini adalah retained message terakhir dari broker — menunggu pembaruan langsung berikutnya.';
-    } else if(msgCount > 1){
-      retainBanner.style.display = 'none';
-    }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
 
-    const ph = Number(p.ph);
-    $('phValue').textContent = isFinite(ph) ? ph.toFixed(2) : '—';
-    const tag = $('phTag');
-    if(isFinite(ph)){
-      let label, color;
-      if(ph < 5.5){ label = 'terlalu asam'; color='var(--alert)'; }
-      else if(ph <= 6.5){ label='ideal untuk melon'; color='var(--good)'; }
-      else if(ph <= 7.5){ label='sedikit basa'; color='var(--warn)'; }
-      else { label='terlalu basa'; color='var(--aqua)'; }
-      tag.textContent = label;
-      tag.style.color = color;
-      tag.style.background = 'rgba(255,255,255,0.06)';
-      const clamped = Math.max(0, Math.min(14, ph));
-      const angle = -90 + (clamped/14)*180;
-      $('phNeedle').style.transform = 'rotate(' + angle + 'deg)';
-    }
+        .brand h1 {
+            font-family: 'Fraunces', serif;
+            font-weight: 600;
+            font-size: 22px;
+            margin: 0;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
 
-    $('tempValue').innerHTML = isFinite(Number(p.temp)) ? Number(p.temp).toFixed(2) + '<span class="unit">°C</span>' : '—';
-    $('tdsValue').innerHTML = isFinite(Number(p.tds)) ? Number(p.tds).toFixed(2) + '<span class="unit">ppm</span>' : '—';
-    $('volValue').innerHTML = (p.vol !== undefined) ? p.vol + '<span class="unit">%</span>' : '—';
-    $('tempFoot').textContent = 'voltPH ' + (p.voltPH !== undefined ? Number(p.voltPH).toFixed(4) : '—');
-    $('tdsFoot').textContent = 'voltTDS ' + (p.voltTDS !== undefined ? Number(p.voltTDS).toFixed(4) : '—');
+        .brand .topic {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-top: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
 
-    setChip('chipA','chipAText', p.nutrisiA);
-    setChip('chipB','chipBText', p.nutrisiB);
-    setChip('chipValve','chipValveText', p.valve);
+        .leaf {
+            width: 34px;
+            height: 34px;
+            flex: none;
+            transition: filter .4s ease;
+            filter: drop-shadow(0 0 0 rgba(111, 203, 77, 0));
+        }
 
-    if(p.config){
-      $('cfgAcid').textContent = p.config.acidVoltage;
-      $('cfgNeutral').textContent = p.config.neutralVoltage;
-      $('cfgAlkaline').textContent = p.config.alkalineVoltage;
-      $('cfgK').textContent = p.config.kValue;
-    }
-    $('rawVoltPH').textContent = p.voltPH !== undefined ? p.voltPH : '—';
-    $('rawVoltTDS').textContent = p.voltTDS !== undefined ? p.voltTDS : '—';
-    $('rawTs').textContent = p.ts !== undefined ? p.ts : '—';
-    $('rawDate').textContent = p.date || '—';
+        .leaf.on {
+            filter: drop-shadow(0 0 10px rgba(111, 203, 77, 0.55));
+        }
 
-    setLastUpdate(p.date ? p.date : new Date().toLocaleString('id-ID'));
+        .leaf.demo {
+            filter: drop-shadow(0 0 10px rgba(232, 178, 74, 0.5));
+        }
 
-    const label = p.ts ? new Date(p.ts*1000).toLocaleTimeString('id-ID') : new Date().toLocaleTimeString('id-ID');
-    history.labels.push(label);
-    history.temp.push(Number(p.temp));
-    history.ph.push(Number(p.ph));
-    history.tds.push(Number(p.tds));
-    if(history.labels.length > MAX_POINTS){
-      history.labels.shift(); history.temp.shift(); history.ph.shift(); history.tds.shift();
-    }
-    $('emptyChart').style.display = 'none';
-    updateChart();
-  }
+        .status-cluster {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
 
-  function setChip(elId, textId, val){
-    const el = $(elId), tx = $(textId);
-    const isOn = String(val).toUpperCase() === 'ON';
-    el.className = 'state-chip ' + (isOn ? 'on' : 'off');
-    tx.textContent = isOn ? 'ON' : 'OFF';
-  }
+        .pill {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 11px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            color: var(--muted);
+            white-space: nowrap;
+        }
 
-  // ---------- chart ----------
-  let chart, activeMetric = 'temp';
-  const metricMeta = {
-    temp: { color: '#F0C36D' },
-    ph: { color: '#6FCB4D' },
-    tds: { color: '#4FB6C9' }
-  };
+        .pill .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--muted-dim);
+            flex: none;
+        }
 
-  function initChart(){
-    if(typeof Chart === 'undefined') return;
-    const ctx = $('trendChart').getContext('2d');
-    chart = new Chart(ctx, {
-      type: 'line',
-      data: { labels: [], datasets: [{ data: [], borderColor: metricMeta.temp.color, backgroundColor: 'transparent', tension: 0.35, pointRadius: 0, borderWidth: 2 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        animation: { duration: 300 },
-        scales: {
-          x: { grid: { color: '#2A3F2E' }, ticks: { color: '#8FA88F', maxTicksLimit: 5, font: { family: 'IBM Plex Mono', size: 10 } } },
-          y: { grid: { color: '#2A3F2E' }, ticks: { color: '#8FA88F', font: { family: 'IBM Plex Mono', size: 10 } } }
-        },
-        plugins: { legend: { display: false } }
-      }
-    });
-  }
+        .pill.ok {
+            color: var(--good);
+            border-color: var(--good-dim);
+        }
 
-  function updateChart(){
-    if(!chart) return;
-    chart.data.labels = history.labels;
-    chart.data.datasets[0].data = history[activeMetric];
-    chart.data.datasets[0].borderColor = metricMeta[activeMetric].color;
-    chart.update('none');
-  }
+        .pill.ok .dot {
+            background: var(--good);
+        }
 
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      activeMetric = tab.dataset.metric;
-      updateChart();
-    });
-  });
+        .pill.bad {
+            color: var(--alert);
+            border-color: var(--alert-dim);
+        }
 
-  window.addEventListener('load', initChart);
+        .pill.bad .dot {
+            background: var(--alert);
+        }
 
-  // ---------- PWA service worker ----------
-  if('serviceWorker' in navigator){
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    });
-  }
-})();
-</script>
+        .pill.warn {
+            color: var(--warn);
+            border-color: var(--warn-dim);
+        }
+
+        .pill.warn .dot {
+            background: var(--warn);
+        }
+
+        .iconbtn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            cursor: pointer;
+            color: var(--muted);
+            transition: all .15s ease;
+            flex: none;
+        }
+
+        .iconbtn:hover,
+        .iconbtn.active {
+            color: var(--good);
+            border-color: var(--good-dim);
+        }
+
+        .iconbtn svg {
+            width: 17px;
+            height: 17px;
+        }
+
+        /* ---------- views ---------- */
+        .view {
+            display: block;
+        }
+
+        .view.hidden {
+            display: none;
+        }
+
+        /* ---------- settings view ---------- */
+        .settings-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .settings-head h2 {
+            font-family: 'Fraunces', serif;
+            font-size: 19px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--muted);
+            font-size: 12.5px;
+            font-weight: 600;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px 4px;
+        }
+
+        .back-link:hover {
+            color: var(--text);
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--hairline);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel .sub {
+            font-size: 12.5px;
+            color: var(--muted);
+            margin: 0 0 16px;
+            line-height: 1.5;
+        }
+
+        .grid-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 12px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--hairline);
+            color: var(--text);
+            padding: 11px 10px;
+            border-radius: 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .field input:focus,
+        .field select:focus {
+            border-color: var(--good-dim);
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 13.5px;
+            padding: 11px 18px;
+            border-radius: 9px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+        .btn-primary {
+            background: var(--good);
+            color: #0D1A0F;
+        }
+
+        .btn-primary:hover {
+            background: #84d966;
+        }
+
+        .btn-primary:disabled {
+            background: var(--good-dim);
+            color: var(--muted);
+            cursor: not-allowed;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--muted);
+            border-color: var(--hairline);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text);
+            border-color: var(--muted-dim);
+        }
+
+        .conn-error {
+            font-size: 12.5px;
+            color: var(--alert);
+            margin-top: 12px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .status-summary {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+
+        .install-tip {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            border-radius: var(--radius);
+            padding: 16px;
+            font-size: 12.5px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .install-tip svg {
+            flex: none;
+            width: 18px;
+            height: 18px;
+            color: var(--aqua);
+            margin-top: 1px;
+        }
+
+        .install-tip b {
+            color: var(--text);
+        }
+
+        /* ---------- retained badge ---------- */
+        .retain-banner {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-size: 12.5px;
+            color: var(--warn);
+            background: var(--warn-dim);
+            border: 1px solid rgba(232, 178, 74, 0.35);
+            border-radius: 10px;
+            padding: 9px 13px;
+            margin-bottom: 20px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .retain-banner svg {
+            flex: none;
+        }
+
+        /* ---------- hero meters ---------- */
+        .hero {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        @media(max-width:760px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .meter-card {
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            border-radius: var(--radius);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .meter-card .eyebrow {
+            font-size: 11.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+        }
+
+        .ph-layout {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .ph-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 46px;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .ph-label {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+
+        .ph-tag {
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .gauge-wrap {
+            flex: none;
+        }
+
+        .tds-temp {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .mini-meter {
+            padding-top: 2px;
+        }
+
+        .mini-meter .val {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 32px;
+            font-weight: 600;
+            line-height: 1;
+            margin-top: 8px;
+        }
+
+        .mini-meter .unit {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 500;
+            margin-left: 3px;
+        }
+
+        .mini-meter .val.aqua {
+            color: var(--aqua);
+        }
+
+        .mini-meter .val.temp {
+            color: #F0C36D;
+        }
+
+        .mini-meter .foot {
+            font-size: 11.5px;
+            color: var(--muted-dim);
+            margin-top: 6px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .divider-mini {
+            height: 1px;
+            background: var(--hairline);
+            margin: 14px 0;
+        }
+
+        /* ---------- secondary grid ---------- */
+        .grid4 {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        @media(max-width:900px) {
+            .grid4 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .status-card {
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            border-radius: var(--radius);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .status-card .top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status-card .icon {
+            width: 19px;
+            height: 19px;
+            color: var(--muted);
+        }
+
+        .status-card .name {
+            font-size: 11.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .state-chip {
+            align-self: flex-start;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14.5px;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .state-chip.on {
+            background: var(--good-dim);
+            color: var(--good);
+        }
+
+        .state-chip.off {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--muted-dim);
+        }
+
+        .state-chip .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* ---------- trend ---------- */
+        .trend-card {
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-bottom: 14px;
+        }
+
+        .trend-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .trend-head h3 {
+            font-family: 'Fraunces', serif;
+            font-size: 15.5px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 6px;
+            background: var(--surface);
+            padding: 4px;
+            border-radius: 10px;
+            border: 1px solid var(--hairline);
+        }
+
+        .tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 7px;
+            color: var(--muted);
+            cursor: pointer;
+            background: transparent;
+            border: none;
+        }
+
+        .tab.active {
+            background: var(--card-hi);
+            color: var(--text);
+        }
+
+        .chart-holder {
+            height: 200px;
+            position: relative;
+        }
+
+        .empty-chart {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted-dim);
+            font-size: 12.5px;
+            font-family: 'IBM Plex Mono', monospace;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        /* ---------- calibration / raw ---------- */
+        .lower {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        @media(max-width:760px) {
+            .lower {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .spec-card {
+            background: var(--card);
+            border: 1px solid var(--hairline);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+        }
+
+        .spec-card h3 {
+            font-family: 'Fraunces', serif;
+            font-size: 14.5px;
+            font-weight: 600;
+            margin: 0 0 10px;
+        }
+
+        .spec-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--hairline);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12.5px;
+            gap: 10px;
+        }
+
+        .spec-row .k {
+            color: var(--muted);
+        }
+
+        .spec-row .v {
+            color: var(--text);
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .spec-row:last-child {
+            border-bottom: none;
+        }
+
+        footer {
+            text-align: center;
+            color: var(--muted-dim);
+            font-size: 11px;
+            margin-top: 24px;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        /* ---------- bottom nav (mobile) ---------- */
+        .bottom-nav {
+            display: none;
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 20;
+            background: rgba(22, 36, 26, 0.92);
+            backdrop-filter: blur(14px);
+            border-top: 1px solid var(--hairline);
+            padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+            justify-content: space-around;
+        }
+
+        .nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            background: none;
+            border: none;
+            color: var(--muted-dim);
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 22px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: color .15s ease;
+        }
+
+        .nav-btn svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .nav-btn.active {
+            color: var(--good);
+        }
+
+        @media(max-width:760px) {
+            body {
+                padding-bottom: var(--nav-h);
+            }
+
+            .bottom-nav {
+                display: flex;
+            }
+
+            .iconbtn.desktop-only {
+                display: none;
+            }
+
+            .wrap {
+                padding-bottom: 24px;
+            }
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--good);
+            outline-offset: 2px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="veins"></div>
+    <div class="wrap">
+
+        <div class="topbar">
+            <div class="brand">
+                <svg class="leaf" id="leafIcon" viewBox="0 0 48 48" fill="none">
+                    <path d="M24 6C12 6 6 16 6 26c0 9 6 16 18 16s18-7 18-16C42 16 36 6 24 6Z" stroke="currentColor"
+                        stroke-width="2" fill="rgba(111,203,77,0.08)" />
+                    <path d="M24 42V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    <path d="M24 24c-4-4-10-5-14-3M24 30c4-4 10-5 14-3M24 18c-3-3-7-4-10-3" stroke="currentColor"
+                        stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+                <div style="min-width:0;">
+                    <h1>Askara Melon</h1>
+                    <div class="topic">topik: <span id="topicLabel">askara/melon/status</span></div>
+                </div>
+            </div>
+            <div class="status-cluster">
+                <span class="pill" id="statusPill"><span class="dot"></span><span id="statusText">Belum
+                        terhubung</span></span>
+                <span class="pill" id="lastUpdatePill" style="display:none;"><span class="dot"
+                        style="background:var(--aqua)"></span><span id="lastUpdateText">—</span></span>
+                <button class="iconbtn desktop-only" id="settingsToggle" aria-label="Pengaturan koneksi"
+                    title="Pengaturan koneksi">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 15a3 3 0 100-6 3 3 0 000 6Z" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1Z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============ DASHBOARD VIEW ============ -->
+        <section class="view" id="dashboardView">
+
+            <div class="retain-banner" id="retainBanner" style="display:none;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v4l3 2" />
+                </svg>
+                <span id="retainText">Menampilkan pesan retained terakhir dari broker — menunggu pembaruan
+                    langsung.</span>
+            </div>
+
+            <div class="hero">
+                <div class="meter-card">
+                    <div class="eyebrow">Tingkat keasaman</div>
+                    <div class="ph-layout">
+                        <div class="gauge-wrap">
+                            <svg width="130" height="84" viewBox="0 0 140 90">
+                                <path d="M10 80 A60 60 0 0 1 46.6 25.3" stroke="var(--alert)" stroke-width="10"
+                                    fill="none" stroke-linecap="round" />
+                                <path d="M46.6 25.3 A60 60 0 0 1 93.4 25.3" stroke="var(--good)" stroke-width="10"
+                                    fill="none" stroke-linecap="round" />
+                                <path d="M93.4 25.3 A60 60 0 0 1 130 80" stroke="var(--aqua)" stroke-width="10"
+                                    fill="none" stroke-linecap="round" />
+                                <line id="phNeedle" x1="70" y1="80" x2="70" y2="26" stroke="var(--text)"
+                                    stroke-width="2.5" stroke-linecap="round" style="transform-origin:70px 80px;" />
+                                <circle cx="70" cy="80" r="4.5" fill="var(--text)" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="ph-value" id="phValue">—</div>
+                            <div class="ph-label">pH larutan nutrisi</div>
+                            <div class="ph-tag" id="phTag">menunggu data</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="meter-card">
+                    <div class="eyebrow">Suhu &amp; kepekatan nutrisi</div>
+                    <div class="tds-temp">
+                        <div class="mini-meter">
+                            <div class="eyebrow" style="font-size:11px;">Suhu larutan</div>
+                            <div class="val temp" id="tempValue">—<span class="unit">°C</span></div>
+                            <div class="foot" id="tempFoot">voltPH —</div>
+                        </div>
+                        <div class="mini-meter">
+                            <div class="eyebrow" style="font-size:11px;">TDS</div>
+                            <div class="val aqua" id="tdsValue">—<span class="unit">ppm</span></div>
+                            <div class="foot" id="tdsFoot">voltTDS —</div>
+                        </div>
+                    </div>
+                    <div class="divider-mini"></div>
+                    <div class="mini-meter">
+                        <div class="eyebrow" style="font-size:11px;">Volume air</div>
+                        <div class="val" id="volValue" style="color:var(--text);">—<span class="unit">%</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid4">
+                <div class="status-card">
+                    <div class="top-row">
+                        <span class="name">Nutrisi A</span>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 2v6M12 22v-6M4 12h6M14 12h6" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                    </div>
+                    <span class="state-chip off" id="chipA"><span class="dot"></span><span
+                            id="chipAText">OFF</span></span>
+                </div>
+                <div class="status-card">
+                    <div class="top-row">
+                        <span class="name">Nutrisi B</span>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 2v6M12 22v-6M4 12h6M14 12h6" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                    </div>
+                    <span class="state-chip off" id="chipB"><span class="dot"></span><span
+                            id="chipBText">OFF</span></span>
+                </div>
+                <div class="status-card">
+                    <div class="top-row">
+                        <span class="name">Katup / valve</span>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 2v20M5 8l7-6 7 6M5 16l7 6 7-6" />
+                        </svg>
+                    </div>
+                    <span class="state-chip off" id="chipValve"><span class="dot"></span><span
+                            id="chipValveText">OFF</span></span>
+                </div>
+                <div class="status-card">
+                    <div class="top-row">
+                        <span class="name">Pesan diterima</span>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                        </svg>
+                    </div>
+                    <span class="state-chip off" id="chipCount"
+                        style="color:var(--text); background:rgba(255,255,255,0.04);"><span
+                            id="chipCountText">0</span></span>
+                </div>
+            </div>
+
+            <div class="trend-card">
+                <div class="trend-head">
+                    <h3>Tren pembacaan sesi ini</h3>
+                    <div class="tabs" role="tablist">
+                        <button class="tab active" data-metric="temp">Suhu</button>
+                        <button class="tab" data-metric="ph">pH</button>
+                        <button class="tab" data-metric="tds">TDS</button>
+                    </div>
+                </div>
+                <div class="chart-holder">
+                    <canvas id="trendChart"></canvas>
+                    <div class="empty-chart" id="emptyChart">Belum ada data — hubungkan ke broker atau jalankan mode
+                        demo untuk mulai mengisi grafik.</div>
+                </div>
+            </div>
+
+            <div class="lower">
+                <div class="spec-card">
+                    <h3>Kalibrasi sensor pH</h3>
+                    <div class="spec-row"><span class="k">acidVoltage</span><span class="v" id="cfgAcid">—</span></div>
+                    <div class="spec-row"><span class="k">neutralVoltage</span><span class="v" id="cfgNeutral">—</span>
+                    </div>
+                    <div class="spec-row"><span class="k">alkalineVoltage</span><span class="v"
+                            id="cfgAlkaline">—</span></div>
+                    <div class="spec-row"><span class="k">kValue (TDS)</span><span class="v" id="cfgK">—</span></div>
+                </div>
+                <div class="spec-card">
+                    <h3>Pembacaan mentah</h3>
+                    <div class="spec-row"><span class="k">voltPH</span><span class="v" id="rawVoltPH">—</span></div>
+                    <div class="spec-row"><span class="k">voltTDS</span><span class="v" id="rawVoltTDS">—</span></div>
+                    <div class="spec-row"><span class="k">ts</span><span class="v" id="rawTs">—</span></div>
+                    <div class="spec-row"><span class="k">date</span><span class="v" id="rawDate">—</span></div>
+                </div>
+            </div>
+
+            <footer>Askara Melon · askara/melon/status · disegarkan otomatis saat pesan baru masuk</footer>
+        </section>
+
+        <!-- ============ SETTINGS VIEW ============ -->
+        <section class="view hidden" id="settingsView">
+            <div class="settings-head">
+                <h2>Pengaturan</h2>
+                <button class="back-link" id="backToDash">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                    </svg>
+                    Kembali ke Dashboard
+                </button>
+            </div>
+
+            <div class="status-summary">
+                <span class="pill" id="statusPill2"><span class="dot"></span><span id="statusText2">Belum
+                        terhubung</span></span>
+                <span class="pill" id="lastUpdatePill2" style="display:none;"><span class="dot"
+                        style="background:var(--aqua)"></span><span id="lastUpdateText2">—</span></span>
+            </div>
+
+            <div class="panel">
+                <p class="sub">Konfigurasi broker MQTT (EMQX). Koneksi memakai MQTT over WebSocket langsung dari
+                    peramban — kredensial hanya disimpan sementara di sesi ini, tidak dikirim ke mana pun selain broker.
+                </p>
+                <div class="grid-fields">
+                    <div class="field">
+                        <label for="fProto">Protokol</label>
+                        <select id="fProto">
+                            <option value="wss">wss:// (aman, port umum 8084)</option>
+                            <option value="ws">ws:// (tanpa TLS, port umum 8083)</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="fHost">Host broker</label>
+                        <input id="fHost" type="text" placeholder="mis. abcde123.ala.asia-southeast1.emqxsl.com"
+                            autocapitalize="off" autocorrect="off">
+                    </div>
+                    <div class="field">
+                        <label for="fPort">Port</label>
+                        <input id="fPort" type="text" inputmode="numeric" placeholder="8084">
+                    </div>
+                    <div class="field">
+                        <label for="fPath">Path WebSocket</label>
+                        <input id="fPath" type="text" value="/mqtt" autocapitalize="off" autocorrect="off">
+                    </div>
+                    <div class="field">
+                        <label for="fUser">Username</label>
+                        <input id="fUser" type="text" placeholder="opsional" autocapitalize="off" autocorrect="off">
+                    </div>
+                    <div class="field">
+                        <label for="fPass">Password</label>
+                        <input id="fPass" type="password" placeholder="opsional">
+                    </div>
+                    <div class="field">
+                        <label for="fTopic">Topik</label>
+                        <input id="fTopic" type="text" value="askara/melon/status" autocapitalize="off"
+                            autocorrect="off">
+                    </div>
+                    <div class="field">
+                        <label for="fClientId">Client ID</label>
+                        <input id="fClientId" type="text" autocapitalize="off" autocorrect="off">
+                    </div>
+                </div>
+                <div class="panel-actions">
+                    <button class="btn btn-primary" id="connectBtn">Hubungkan</button>
+                    <button class="btn btn-ghost" id="disconnectBtn" style="display:none;">Putuskan</button>
+                    <button class="btn btn-ghost" id="demoBtn">Coba mode demo</button>
+                </div>
+                <div class="conn-error" id="connError" style="display:none;"></div>
+            </div>
+
+            <div class="panel">
+                <p class="sub"><b style="color:var(--text);">Tren historis di Google Sheets.</b> Deploy Apps Script
+                    sebagai Web App (lihat kode <code>Code.gs</code> yang disertakan), lalu tempel URL
+                    <code>/exec</code> di bawah ini. Setiap pesan MQTT yang masuk akan dicatat sebagai baris baru di
+                    spreadsheet, dan grafik tren akan memuat riwayat dari sana — jadi tetap ada meski halaman dimuat
+                    ulang atau dibuka dari perangkat lain.</p>
+                <div class="grid-fields">
+                    <div class="field" style="grid-column:1/-1;">
+                        <label for="fGasUrl">URL Web App (Apps Script)</label>
+                        <input id="fGasUrl" type="text" placeholder="https://script.google.com/macros/s/XXXXXXXX/exec"
+                            autocapitalize="off" autocorrect="off">
+                    </div>
+                    <div class="field">
+                        <label for="fLogInterval">Interval pencatatan (detik)</label>
+                        <input id="fLogInterval" type="text" inputmode="numeric" value="30">
+                    </div>
+                    <div class="field">
+                        <label for="fHistLimit">Jumlah baris riwayat dimuat</label>
+                        <input id="fHistLimit" type="text" inputmode="numeric" value="150">
+                    </div>
+                </div>
+                <div class="panel-actions">
+                    <button class="btn btn-primary" id="gasTestBtn">Tes &amp; muat riwayat</button>
+                    <span class="pill" id="gasStatusPill"><span class="dot"></span><span id="gasStatusText">Belum
+                            diuji</span></span>
+                </div>
+                <div class="conn-error" id="gasError" style="display:none;"></div>
+            </div>
+
+            <div class="install-tip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v5M12 16h.01" />
+                </svg>
+                <div><b>Pasang sebagai aplikasi:</b> buka halaman ini di Chrome/Safari, lalu pilih "Tambahkan ke Layar
+                    Utama" (Android) atau "Add to Home Screen" (iOS) supaya Askara Melon berjalan seperti aplikasi
+                    mandiri.</div>
+            </div>
+        </section>
+
+    </div>
+
+    <nav class="bottom-nav" id="bottomNav">
+        <button class="nav-btn active" data-view="dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="3" y="3" width="7" height="9" rx="1.5" />
+                <rect x="14" y="3" width="7" height="5" rx="1.5" />
+                <rect x="14" y="12" width="7" height="9" rx="1.5" />
+                <rect x="3" y="16" width="7" height="5" rx="1.5" />
+            </svg>
+            Dashboard
+        </button>
+        <button class="nav-btn" data-view="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 15a3 3 0 100-6 3 3 0 000 6Z" />
+                <path
+                    d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1Z" />
+            </svg>
+            Pengaturan
+        </button>
+    </nav>
+
+    <script>
+        (function () {
+            const $ = id => document.getElementById(id);
+            const dashboardView = $('dashboardView');
+            const settingsView = $('settingsView');
+            const bottomNav = $('bottomNav');
+            const settingsToggle = $('settingsToggle');
+            const backToDash = $('backToDash');
+            const connectBtn = $('connectBtn');
+            const disconnectBtn = $('disconnectBtn');
+            const demoBtn = $('demoBtn');
+            const connError = $('connError');
+            const leafIcon = $('leafIcon');
+            const topicLabel = $('topicLabel');
+            const retainBanner = $('retainBanner');
+
+            $('fClientId').value = 'askara-web-' + Math.random().toString(16).slice(2, 8);
+
+            // ---------- view switching ----------
+            function setView(view) {
+                if (view === 'settings') {
+                    dashboardView.classList.add('hidden');
+                    settingsView.classList.remove('hidden');
+                } else {
+                    settingsView.classList.add('hidden');
+                    dashboardView.classList.remove('hidden');
+                }
+                document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+                if (settingsToggle) settingsToggle.classList.toggle('active', view === 'settings');
+            }
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+            if (settingsToggle) settingsToggle.addEventListener('click', () => {
+                const isOpen = !settingsView.classList.contains('hidden');
+                setView(isOpen ? 'dashboard' : 'settings');
+            });
+            backToDash.addEventListener('click', () => setView('dashboard'));
+
+            // ---------- status (mirrored to both views) ----------
+            function setStatus(kind, text) {
+                ['statusPill', 'statusPill2'].forEach(id => { const el = $(id); if (el) el.className = 'pill' + (kind ? ' ' + kind : ''); });
+                ['statusText', 'statusText2'].forEach(id => { const el = $(id); if (el) el.textContent = text; });
+                leafIcon.classList.remove('on', 'demo');
+                if (kind === 'ok') leafIcon.classList.add('on');
+                if (kind === 'warn') leafIcon.classList.add('demo');
+            }
+            function setLastUpdate(text) {
+                ['lastUpdatePill', 'lastUpdatePill2'].forEach(id => { const el = $(id); if (el) el.style.display = 'flex'; });
+                ['lastUpdateText', 'lastUpdateText2'].forEach(id => { const el = $(id); if (el) el.textContent = text; });
+            }
+
+            function showError(msg) {
+                connError.style.display = msg ? 'block' : 'none';
+                connError.textContent = msg || '';
+            }
+
+            let client = null;
+            let msgCount = 0;
+            let demoTimer = null;
+            const history = { temp: [], ph: [], tds: [], labels: [] };
+            const MAX_POINTS = 40;
+            let lastLoggedAt = 0;
+
+            // ---------- Google Sheets (Apps Script) integration ----------
+            const gasUrlInput = $('fGasUrl');
+            const gasError = $('gasError');
+            function setGasStatus(kind, text) {
+                $('gasStatusPill').className = 'pill' + (kind ? ' ' + kind : '');
+                $('gasStatusText').textContent = text;
+            }
+            function showGasError(msg) {
+                gasError.style.display = msg ? 'block' : 'none';
+                gasError.textContent = msg || '';
+            }
+
+            function logToSheet(payload) {
+                const url = gasUrlInput.value.trim();
+                if (!url) return;
+                const intervalSec = parseInt($('fLogInterval').value, 10) || 30;
+                const now = Date.now();
+                if (now - lastLoggedAt < intervalSec * 1000) return;
+                lastLoggedAt = now;
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                }).then(res => res.json()).then(res => {
+                    if (res && res.ok) { setGasStatus('ok', 'Tercatat ke Sheets'); showGasError(''); }
+                    else { setGasStatus('bad', 'Sheets menolak data'); showGasError((res && res.error) || 'Periksa struktur Code.gs.'); }
+                }).catch(() => { setGasStatus('bad', 'Gagal mencatat ke Sheets'); });
+            }
+
+            function loadHistoryFromSheet() {
+                const url = gasUrlInput.value.trim();
+                if (!url) { showGasError('Isi URL Web App terlebih dahulu.'); return; }
+                const limit = parseInt($('fHistLimit').value, 10) || 150;
+                setGasStatus('warn', 'Memuat riwayat…');
+                showGasError('');
+                fetch(url + '?limit=' + limit)
+                    .then(res => res.json())
+                    .then(res => {
+                        if (!res || !res.ok || !Array.isArray(res.rows)) {
+                            setGasStatus('bad', 'Format respons tak dikenali');
+                            showGasError('Pastikan Code.gs mengembalikan { ok:true, rows:[...] }.');
+                            return;
+                        }
+                        history.labels = []; history.temp = []; history.ph = []; history.tds = [];
+                        res.rows.forEach(r => {
+                            const label = r.date || (r.timestamp ? new Date(r.timestamp).toLocaleTimeString('id-ID') : '');
+                            history.labels.push(label);
+                            history.temp.push(Number(r.temp));
+                            history.ph.push(Number(r.ph));
+                            history.tds.push(Number(r.tds));
+                        });
+                        if (history.labels.length > MAX_POINTS) {
+                            history.labels = history.labels.slice(-MAX_POINTS);
+                            history.temp = history.temp.slice(-MAX_POINTS);
+                            history.ph = history.ph.slice(-MAX_POINTS);
+                            history.tds = history.tds.slice(-MAX_POINTS);
+                        }
+                        $('emptyChart').style.display = history.labels.length ? 'none' : 'flex';
+                        updateChart();
+                        setGasStatus('ok', 'Riwayat dimuat (' + res.rows.length + ' baris)');
+                    })
+                    .catch(() => {
+                        setGasStatus('bad', 'Gagal terhubung ke Web App');
+                        showGasError('Periksa URL, dan pastikan deployment diatur ke akses "Anyone".');
+                    });
+            }
+
+            $('gasTestBtn').addEventListener('click', loadHistoryFromSheet);
+
+            // ---------- connect ----------
+            connectBtn.addEventListener('click', () => {
+                stopDemo();
+                showError('');
+                const proto = $('fProto').value;
+                const host = $('fHost').value.trim();
+                const port = $('fPort').value.trim() || (proto === 'wss' ? '8084' : '8083');
+                const path = $('fPath').value.trim() || '/mqtt';
+                const user = $('fUser').value;
+                const pass = $('fPass').value;
+                const topic = $('fTopic').value.trim() || 'askara/melon/status';
+                const clientId = $('fClientId').value.trim() || ('askara-web-' + Math.random().toString(16).slice(2, 8));
+
+                if (!host) { showError('Isi host broker terlebih dahulu.'); return; }
+
+                topicLabel.textContent = topic;
+                const url = proto + '://' + host + ':' + port + path;
+
+                setStatus('warn', 'Menghubungkan…');
+                connectBtn.disabled = true;
+
+                try {
+                    if (typeof mqtt === 'undefined') {
+                        showError('Pustaka MQTT gagal dimuat dari CDN. Periksa koneksi internet lalu muat ulang halaman.');
+                        setStatus(null, 'Belum terhubung');
+                        connectBtn.disabled = false;
+                        return;
+                    }
+                    client = mqtt.connect(url, {
+                        clientId,
+                        username: user || undefined,
+                        password: pass || undefined,
+                        reconnectPeriod: 4000,
+                        connectTimeout: 8000,
+                        clean: true
+                    });
+
+                    client.on('connect', () => {
+                        setStatus('ok', 'Terhubung');
+                        connectBtn.disabled = false;
+                        connectBtn.style.display = 'none';
+                        disconnectBtn.style.display = 'inline-block';
+                        showError('');
+                        client.subscribe(topic, { qos: 1 }, (err) => {
+                            if (err) showError('Gagal subscribe ke topik: ' + err.message);
+                        });
+                    });
+
+                    client.on('message', (t, message, packet) => {
+                        try {
+                            const payload = JSON.parse(message.toString());
+                            handlePayload(payload, !!(packet && packet.retain));
+                        } catch (e) {
+                            showError('Payload MQTT bukan JSON yang valid.');
+                        }
+                    });
+
+                    client.on('reconnect', () => setStatus('warn', 'Menyambung ulang…'));
+                    client.on('close', () => { if (client) setStatus(null, 'Terputus'); });
+                    client.on('error', (err) => {
+                        showError('Kesalahan koneksi: ' + (err && err.message ? err.message : err));
+                        setStatus('bad', 'Gagal terhubung');
+                        connectBtn.disabled = false;
+                    });
+                } catch (e) {
+                    showError('URL broker tidak valid: ' + e.message);
+                    setStatus(null, 'Belum terhubung');
+                    connectBtn.disabled = false;
+                }
+            });
+
+            disconnectBtn.addEventListener('click', () => {
+                if (client) { client.end(true); client = null; }
+                connectBtn.style.display = 'inline-block';
+                connectBtn.disabled = false;
+                disconnectBtn.style.display = 'none';
+                setStatus(null, 'Terputus');
+            });
+
+            // ---------- demo mode ----------
+            const sample = {
+                temp: 27.8125, voltPH: 3.784212, ph: 3.961708, voltTDS: 4.567681, tds: 2.272022,
+                vol: 100, nutrisiA: 'OFF', nutrisiB: 'OFF', valve: 'OFF',
+                config: { acidVoltage: 3.78, neutralVoltage: 3.45, alkalineVoltage: 3.18, kValue: 1.1 }
+            };
+
+            demoBtn.addEventListener('click', () => {
+                if (demoTimer) { stopDemo(); return; }
+                if (client) { client.end(true); client = null; }
+                connectBtn.style.display = 'inline-block'; connectBtn.disabled = false; disconnectBtn.style.display = 'none';
+                demoBtn.textContent = 'Hentikan mode demo';
+                setStatus('warn', 'Mode demo (simulasi)');
+                retainBanner.style.display = 'none';
+                let tick = 0;
+                const run = () => {
+                    tick++;
+                    const jitter = (n, amt) => +(n + (Math.random() - 0.5) * amt).toFixed(4);
+                    const payload = {
+                        temp: jitter(sample.temp, 0.6),
+                        voltPH: jitter(sample.voltPH, 0.02),
+                        ph: jitter(sample.ph, 0.15),
+                        voltTDS: jitter(sample.voltTDS, 0.05),
+                        tds: jitter(sample.tds, 0.1),
+                        vol: sample.vol,
+                        nutrisiA: tick % 6 < 3 ? 'ON' : 'OFF',
+                        nutrisiB: tick % 8 < 2 ? 'ON' : 'OFF',
+                        valve: tick % 5 < 1 ? 'ON' : 'OFF',
+                        date: new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('id-ID'),
+                        ts: Math.floor(Date.now() / 1000),
+                        config: sample.config
+                    };
+                    handlePayload(payload, tick === 1, true);
+                };
+                run();
+                demoTimer = setInterval(run, 3000);
+            });
+
+            function stopDemo() {
+                if (demoTimer) { clearInterval(demoTimer); demoTimer = null; demoBtn.textContent = 'Coba mode demo'; }
+            }
+
+            // ---------- rendering ----------
+            function handlePayload(p, isRetain, isDemo) {
+                msgCount++;
+                $('chipCountText').textContent = msgCount;
+
+                if (isRetain) {
+                    retainBanner.style.display = 'flex';
+                    $('retainText').textContent = 'Pesan pertama ini adalah retained message terakhir dari broker — menunggu pembaruan langsung berikutnya.';
+                } else if (msgCount > 1) {
+                    retainBanner.style.display = 'none';
+                }
+
+                const ph = Number(p.ph);
+                $('phValue').textContent = isFinite(ph) ? ph.toFixed(2) : '—';
+                const tag = $('phTag');
+                if (isFinite(ph)) {
+                    let label, color;
+                    if (ph < 5.5) { label = 'terlalu asam'; color = 'var(--alert)'; }
+                    else if (ph <= 6.5) { label = 'ideal untuk melon'; color = 'var(--good)'; }
+                    else if (ph <= 7.5) { label = 'sedikit basa'; color = 'var(--warn)'; }
+                    else { label = 'terlalu basa'; color = 'var(--aqua)'; }
+                    tag.textContent = label;
+                    tag.style.color = color;
+                    tag.style.background = 'rgba(255,255,255,0.06)';
+                    const clamped = Math.max(0, Math.min(14, ph));
+                    const angle = -90 + (clamped / 14) * 180;
+                    $('phNeedle').style.transform = 'rotate(' + angle + 'deg)';
+                }
+
+                $('tempValue').innerHTML = isFinite(Number(p.temp)) ? Number(p.temp).toFixed(2) + '<span class="unit">°C</span>' : '—';
+                $('tdsValue').innerHTML = isFinite(Number(p.tds)) ? Number(p.tds).toFixed(2) + '<span class="unit">ppm</span>' : '—';
+                $('volValue').innerHTML = (p.vol !== undefined) ? p.vol + '<span class="unit">%</span>' : '—';
+                $('tempFoot').textContent = 'voltPH ' + (p.voltPH !== undefined ? Number(p.voltPH).toFixed(4) : '—');
+                $('tdsFoot').textContent = 'voltTDS ' + (p.voltTDS !== undefined ? Number(p.voltTDS).toFixed(4) : '—');
+
+                setChip('chipA', 'chipAText', p.nutrisiA);
+                setChip('chipB', 'chipBText', p.nutrisiB);
+                setChip('chipValve', 'chipValveText', p.valve);
+
+                if (p.config) {
+                    $('cfgAcid').textContent = p.config.acidVoltage;
+                    $('cfgNeutral').textContent = p.config.neutralVoltage;
+                    $('cfgAlkaline').textContent = p.config.alkalineVoltage;
+                    $('cfgK').textContent = p.config.kValue;
+                }
+                $('rawVoltPH').textContent = p.voltPH !== undefined ? p.voltPH : '—';
+                $('rawVoltTDS').textContent = p.voltTDS !== undefined ? p.voltTDS : '—';
+                $('rawTs').textContent = p.ts !== undefined ? p.ts : '—';
+                $('rawDate').textContent = p.date || '—';
+
+                setLastUpdate(p.date ? p.date : new Date().toLocaleString('id-ID'));
+
+                const label = p.ts ? new Date(p.ts * 1000).toLocaleTimeString('id-ID') : new Date().toLocaleTimeString('id-ID');
+                history.labels.push(label);
+                history.temp.push(Number(p.temp));
+                history.ph.push(Number(p.ph));
+                history.tds.push(Number(p.tds));
+                if (history.labels.length > MAX_POINTS) {
+                    history.labels.shift(); history.temp.shift(); history.ph.shift(); history.tds.shift();
+                }
+                $('emptyChart').style.display = 'none';
+                updateChart();
+                if (!isDemo) logToSheet(p);
+            }
+
+            function setChip(elId, textId, val) {
+                const el = $(elId), tx = $(textId);
+                const isOn = String(val).toUpperCase() === 'ON';
+                el.className = 'state-chip ' + (isOn ? 'on' : 'off');
+                tx.textContent = isOn ? 'ON' : 'OFF';
+            }
+
+            // ---------- chart ----------
+            let chart, activeMetric = 'temp';
+            const metricMeta = {
+                temp: { color: '#F0C36D' },
+                ph: { color: '#6FCB4D' },
+                tds: { color: '#4FB6C9' }
+            };
+
+            function initChart() {
+                if (typeof Chart === 'undefined') return;
+                const ctx = $('trendChart').getContext('2d');
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: [], datasets: [{ data: [], borderColor: metricMeta.temp.color, backgroundColor: 'transparent', tension: 0.35, pointRadius: 0, borderWidth: 2 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        animation: { duration: 300 },
+                        scales: {
+                            x: { grid: { color: '#2A3F2E' }, ticks: { color: '#8FA88F', maxTicksLimit: 5, font: { family: 'IBM Plex Mono', size: 10 } } },
+                            y: { grid: { color: '#2A3F2E' }, ticks: { color: '#8FA88F', font: { family: 'IBM Plex Mono', size: 10 } } }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+
+            function updateChart() {
+                if (!chart) return;
+                chart.data.labels = history.labels;
+                chart.data.datasets[0].data = history[activeMetric];
+                chart.data.datasets[0].borderColor = metricMeta[activeMetric].color;
+                chart.update('none');
+            }
+
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    activeMetric = tab.dataset.metric;
+                    updateChart();
+                });
+            });
+
+            window.addEventListener('load', initChart);
+
+            // ---------- PWA service worker ----------
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('sw.js').catch(() => { });
+                });
+            }
+        })();
+    </script>
 </body>
+
 </html>
