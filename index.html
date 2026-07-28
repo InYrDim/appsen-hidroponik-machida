@@ -137,6 +137,13 @@
   .btn-ghost:hover{color:var(--text); border-color:var(--muted-dim);}
   .conn-error{font-size:12.5px; color:var(--alert); margin-top:12px; font-family:'IBM Plex Mono',monospace;}
   .status-summary{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
+  .checkbox-row{
+    display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--muted);
+    margin-top:14px; cursor:pointer; user-select:none;
+  }
+  .checkbox-row input[type="checkbox"]{
+    width:16px; height:16px; accent-color:var(--good); cursor:pointer; flex:none;
+  }
 
   .install-tip{
     display:flex; gap:10px; align-items:flex-start; background:var(--card); border:1px solid var(--hairline);
@@ -571,6 +578,10 @@
           <input id="fClientId" type="text" autocapitalize="off" autocorrect="off">
         </div>
       </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="fAutoConnect" checked>
+        <span>Sambungkan otomatis saat halaman dibuka</span>
+      </label>
       <div class="panel-actions">
         <button class="btn btn-primary" id="connectBtn">Hubungkan</button>
         <button class="btn btn-ghost" id="disconnectBtn" style="display:none;">Putuskan</button>
@@ -660,6 +671,7 @@
   // dalam bentuk plain text di penyimpanan browser.
   const SETTINGS_KEY = 'askaraMelonSettings';
   const SETTINGS_FIELDS = ['fProto','fHost','fPort','fPath','fUser','fTopic','fClientId','fGasUrl','fLogInterval','fHistLimit'];
+  const SETTINGS_CHECKBOXES = ['fAutoConnect'];
 
   function loadSettings(){
     try{
@@ -674,6 +686,13 @@
           applied = true;
         }
       });
+      SETTINGS_CHECKBOXES.forEach(id => {
+        const el = $(id);
+        if(el && data[id] !== undefined){
+          el.checked = !!data[id];
+          applied = true;
+        }
+      });
       return applied;
     }catch(e){ return false; }
   }
@@ -682,6 +701,7 @@
     try{
       const data = {};
       SETTINGS_FIELDS.forEach(id => { const el = $(id); if(el) data[id] = el.value; });
+      SETTINGS_CHECKBOXES.forEach(id => { const el = $(id); if(el) data[id] = el.checked; });
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
     }catch(e){ /* localStorage tidak tersedia (mode privat dll) — abaikan diam-diam */ }
   }
@@ -695,6 +715,10 @@
     if(!el) return;
     el.addEventListener('input', saveSettings);
     el.addEventListener('change', saveSettings);
+  });
+  SETTINGS_CHECKBOXES.forEach(id => {
+    const el = $(id);
+    if(el) el.addEventListener('change', saveSettings);
   });
   saveSettings(); // simpan client ID otomatis jika baru dibuat
 
@@ -846,7 +870,7 @@
   $('gasTestBtn').addEventListener('click', loadHistoryFromSheet);
 
   // ---------- connect ----------
-  connectBtn.addEventListener('click', () => {
+  function connectToBroker(){
     stopDemo();
     showError('');
     const proto = $('fProto').value;
@@ -859,6 +883,7 @@
     const clientId = $('fClientId').value.trim() || ('askara-web-' + Math.random().toString(16).slice(2,8));
 
     if(!host){ showError('Isi host broker terlebih dahulu.'); return; }
+    if(client){ client.end(true); client = null; }
 
     topicLabel.textContent = topic;
     const url = proto + '://' + host + ':' + port + path;
@@ -914,7 +939,15 @@
       setStatus(null, 'Belum terhubung');
       connectBtn.disabled = false;
     }
-  });
+  }
+
+  connectBtn.addEventListener('click', connectToBroker);
+
+  // Sambungkan otomatis saat halaman dibuka, kalau opsinya aktif dan host sudah terisi
+  // (baik dari default broker.emqx.io maupun dari pengaturan tersimpan di localStorage).
+  if($('fAutoConnect').checked && $('fHost').value.trim()){
+    connectToBroker();
+  }
 
   disconnectBtn.addEventListener('click', () => {
     if(client){ client.end(true); client = null; }
